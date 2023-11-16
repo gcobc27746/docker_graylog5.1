@@ -1,0 +1,58 @@
+version: '2'
+services:
+    # MongoDB: https://hub.docker.com/_/mongo/
+    mongodb:
+        image: mongo:5.0.13
+        volumes:
+            - /storage/graylog5.1/mongo_data:/data/db
+            - /etc/localtime:/etc/localtime:ro
+            - /usr/share/zoneinfo/Asia/Taipei:/etc/timezone:ro
+    # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
+        volumes:
+            - /storage/graylog5.1/es_data:/usr/share/elasticsearch/data
+            - /etc/localtime:/etc/localtime:ro
+            - /usr/share/zoneinfo/Asia/Taipei:/etc/timezone:ro
+        environment:
+            - http.host=0.0.0.0
+            - transport.host=localhost
+            - network.host=0.0.0.0
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+    # Graylog: https://hub.docker.com/r/graylog/graylog/
+    graylog:
+        image: graylog/graylog:5.1
+        volumes:
+            - /storage/graylog5.1/graylog_data:/usr/share/graylog/data4
+            - ./graylog/config:/usr/share/graylog/data/config
+            - /etc/localtime:/etc/localtime:ro
+            - /usr/share/zoneinfo/Asia/Taipei:/etc/timezone:ro
+        environment:
+            - GRAYLOG_ROOT_USERNAME=${GRAYLOG_ROOT_USERNAME}
+            - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+            - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+            - GRAYLOG_HTTP_EXTERNAL_URI=${GRAYLOG_HTTP_EXTERNAL_URI}
+        entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
+        links:
+            - mongodb:mongo
+            - elasticsearch
+        restart: always
+        depends_on:
+            - mongodb
+            - elasticsearch
+        ports:
+        # Graylog web interface and REST API
+        - ${WEB_PORT}:9000
+        # Syslog TCP/UDP
+        - 514:514
+        - 514:514/udp
+        # Rsyslog TCP/UDP
+        - 1514:1514
+        - 1514:1514/udp
+        # GELF TCP/UDP
+        - 12201:12201
+        - 12201:12201/udp
